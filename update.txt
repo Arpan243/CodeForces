@@ -1,0 +1,254 @@
+# management/commands/fetch_power_data.py
+
+# from django.core.management.base import BaseCommand
+from datetime import timezone
+import datetime
+import time
+from datetime import datetime,timedelta
+from django.db.models import Avg
+from .models import PowerData, loadactual
+import requests
+import pytz
+
+
+
+
+def handle():
+    # Make API call and retrieve data
+    url = 'https://103.212.210.33/get-sldc-data.php'
+    params = {
+        'ak': '405897164474526385196061321708',
+        'as': 'GHQmw9VFBvz89IJlFrw86Lu5yYa1nj4go99PJAoAC48pdzNj2x',
+        'fid': '1'
+    }
+    response = requests.get(url, params=params, verify=False)
+
+    data = response.json()
+    
+    #retrive the latest stored date time for comparison
+    last_data= PowerData.objects.all().order_by('-DateTime')[:1].first()
+    
+    
+    if(last_data==None):
+        latest_data = data['api_result']
+        n = len(latest_data)
+        PowerData.objects.create(
+            DateTime = (datetime.strptime(latest_data[n-1]['DateTime'], '%Y-%m-%d %H:%M:%S')),
+            TPCODL = latest_data[n-1]["TPCODL"],
+            TPWODL = latest_data[n-1]["TPWODL"],
+            TPNODL = latest_data[n-1]["TPNODL"],
+            TPSODL = latest_data[n-1]["TPSODL"],
+            OdishaDemand = latest_data[n-1]["OdishaDemand"],
+            Frequency = latest_data[n-1]["Frequency"],
+            VedantaDrawal = latest_data[n-1]["VedantaDrawal"],
+            Solar = latest_data[n-1]["Solar"]
+        )
+        print((datetime.strptime(latest_data[1]['DateTime'], '%Y-%m-%d %H:%M:%S')))
+    else:
+        last_data_datetime = datetime.strptime(last_data.DateTime, '%Y-%m-%d %H:%M:%S') #changing the datetime to naive form
+        latest_data = data['api_result']
+        n = len(latest_data)
+        data_to_insert = []
+        for i in range(0,n):
+            # print(datetime.strptime(latest_data[i]['DateTime'], '%Y-%m-%d %H:%M:%S'))
+            api_time = datetime.strptime(latest_data[i]['DateTime'], '%Y-%m-%d %H:%M:%S')
+            if(api_time>last_data_datetime and (datetime.strptime(latest_data[i]['DateTime'], '%Y-%m-%d %H:%M:%S')!=datetime.strptime(latest_data[i-1]['DateTime'], '%Y-%m-%d %H:%M:%S'))):
+                # print(api_time)
+                # print(last_data_datetime)
+                data_to_insert.append(i)
+        m = len(data_to_insert)
+        print(m)
+        for i in reversed(data_to_insert):
+            PowerData.objects.create(
+            DateTime = (datetime.strptime(latest_data[i]['DateTime'], '%Y-%m-%d %H:%M:%S')),
+            TPCODL = latest_data[i]["TPCODL"],
+            TPWODL = latest_data[i]["TPWODL"],
+            TPNODL = latest_data[i]["TPNODL"],
+            TPSODL = latest_data[i]["TPSODL"],
+            OdishaDemand = latest_data[i]["OdishaDemand"],
+            Frequency = latest_data[i]["Frequency"],
+            VedantaDrawal = latest_data[i]["VedantaDrawal"],
+            Solar = latest_data[i]["Solar"]
+        )
+            print("Data inserted")
+            
+
+        
+        # print(last_data_datetime.astimezone(pytz.utc).replace(tzinfo=None))
+        # print(latest_data[2]['DateTime'])
+        # print(last_data_datetime.astimezone(pytz.utc).replace(tzinfo=None)>datetime.strptime(latest_data[2]['DateTime'], '%Y-%m-%d %H:%M:%S'))
+
+    
+def calculate_and_store_averages():
+    # Get the last 15 rows from PowerData table
+    Data_block = PowerData.objects.all().order_by('-DateTime')[:60]
+    avg = ['avg_TPCODL','avg_TPWODL','avg_TPNODL','avg_TPSODL','avg_OdishaDemand']
+    region_mapping = {
+        'avg_TPCODL': 'Discom-I',
+        'avg_TPWODL': 'Discom-II',
+        'avg_TPNODL': 'Discom-III',
+        'avg_TPSODL': 'Customer-I',
+        'avg_OdishaDemand': 'Total',
+    }
+    # print(Prev_Data[0].DateTime)
+    
+    last_data= loadactual.objects.all().order_by('-date')[:1].first()
+    
+    cnt=0
+    total_TPCODL=0
+    total_TPWODL=0
+    total_TPNODL=0
+    total_TPSODL=0
+    total_OdishaDemand=0
+    if(last_data==None):
+        current_datetime = datetime.now()
+        fifteen_minutes_ago = (current_datetime - timedelta(minutes=15))
+        for data in Data_block:
+            if(datetime.strptime(data.DateTime, "%Y-%m-%d %H:%M:%S")>=fifteen_minutes_ago):
+                cnt +=1
+                total_TPCODL +=data.TPCODL
+                total_TPNODL +=data.TPNODL
+                total_TPWODL +=data.TPWODL
+                total_TPSODL +=data.TPSODL
+                total_OdishaDemand +=data.OdishaDemand
+        print(cnt)
+        avg_TPCODL=total_TPCODL/cnt
+        avg_TPWODL=total_TPWODL/cnt
+        avg_TPNODL=total_TPNODL/cnt
+        avg_TPSODL=total_TPSODL/cnt
+        avg_OdishaDemand=total_OdishaDemand/cnt
+        current_datetime = datetime.now().strftime("%Y-%m-%d %H:%M")
+        unix_timestamp = int(time.time())
+        loadactual.objects.create(
+        date=current_datetime,
+        block_type="15 min",
+        insertion_ts=unix_timestamp,
+        region='Discom-I',
+        load=str(avg_TPCODL),
+        load_actual=None,  # Leave load_actual empty
+        event_type=0  # Set event_type to 0
+    )
+        loadactual.objects.create(
+        date=current_datetime,
+        block_type="15 min",
+        insertion_ts=unix_timestamp,
+        region='Discom-II',
+        load=str(avg_TPWODL),
+        load_actual=None,  # Leave load_actual empty
+        event_type=0  # Set event_type to 0
+    )
+        loadactual.objects.create(
+        date=current_datetime,
+        block_type="15 min",
+        insertion_ts=unix_timestamp,
+        region='Discom-III',
+        load=str(avg_TPNODL),
+        load_actual=None,  # Leave load_actual empty
+        event_type=0  # Set event_type to 0
+    )
+        loadactual.objects.create(
+        date=current_datetime,
+        block_type="15 min",
+        insertion_ts=unix_timestamp,
+        region='Customer-I',
+        load=str(avg_TPSODL),
+        load_actual=None,  # Leave load_actual empty
+        event_type=0  # Set event_type to 0
+    )
+        loadactual.objects.create(
+        date=current_datetime,
+        block_type="15 min",
+        insertion_ts=unix_timestamp,
+        region='Total',
+        load=str(avg_OdishaDemand),
+        load_actual=None,  # Leave load_actual empty
+        event_type=0  # Set event_type to 0
+    )
+        print("Data Stored")
+    else:
+        last_stored_time = last_data.date
+        print(last_stored_time)
+        for data in Data_block:
+            if(datetime.strptime(data.DateTime, "%Y-%m-%d %H:%M:%S")>=datetime.strptime(last_stored_time, "%Y-%m-%d %H:%M")):
+                cnt +=1
+                total_TPCODL +=data.TPCODL
+                total_TPNODL +=data.TPNODL
+                total_TPWODL +=data.TPWODL
+                total_TPSODL +=data.TPSODL
+                total_OdishaDemand +=data.OdishaDemand
+        print(cnt)
+        avg_TPCODL=total_TPCODL/cnt
+        avg_TPWODL=total_TPWODL/cnt
+        avg_TPNODL=total_TPNODL/cnt
+        avg_TPSODL=total_TPSODL/cnt
+        avg_OdishaDemand=total_OdishaDemand/cnt
+        current_datetime = datetime.now().strftime("%Y-%m-%d %H:%M")
+        unix_timestamp = int(time.time())
+        loadactual.objects.create(
+        date=current_datetime,
+        block_type="15 min",
+        insertion_ts=unix_timestamp,
+        region='Discom-I',
+        load=str(avg_TPCODL),
+        load_actual=None,  # Leave load_actual empty
+        event_type=0  # Set event_type to 0
+    )
+        loadactual.objects.create(
+        date=current_datetime,
+        block_type="15 min",
+        insertion_ts=unix_timestamp,
+        region='Discom-II',
+        load=str(avg_TPWODL),
+        load_actual=None,  # Leave load_actual empty
+        event_type=0  # Set event_type to 0
+    )
+        loadactual.objects.create(
+        date=current_datetime,
+        block_type="15 min",
+        insertion_ts=unix_timestamp,
+        region='Discom-III',
+        load=str(avg_TPNODL),
+        load_actual=None,  # Leave load_actual empty
+        event_type=0  # Set event_type to 0
+    )
+        loadactual.objects.create(
+        date=current_datetime,
+        block_type="15 min",
+        insertion_ts=unix_timestamp,
+        region='Customer-I',
+        load=str(avg_TPSODL),
+        load_actual=None,  # Leave load_actual empty
+        event_type=0  # Set event_type to 0
+    )
+        loadactual.objects.create(
+        date=current_datetime,
+        block_type="15 min",
+        insertion_ts=unix_timestamp,
+        region='Total',
+        load=str(avg_OdishaDemand),
+        load_actual=None,  # Leave load_actual empty
+        event_type=0  # Set event_type to 0
+    )
+    
+    # current_datetime = datetime.now()
+    # formatted_datetime = current_datetime.strftime("%m-%d-%Y %H:%M")
+    # unix_timestamp = int(time.time())
+    # # print(type(averages))
+    # # for i in range(0,5):
+    # #     print(region_mapping[avg[i]],":", averages[avg[i]])
+    # # print(formatted_datetime)
+    # # print(unix_timestamp)
+    # for i in range(5):
+    #     loadactual.objects.create(
+    #     date=formatted_datetime,
+    #     block_type="15 min",
+    #     insertion_ts=unix_timestamp,
+    #     region=region_mapping[avg[i]],
+    #     load=str(averages[avg[i]]),
+    #     load_actual=None,  # Leave load_actual empty
+    #     event_type=0  # Set event_type to 0
+    # )
+    # print("data stored in loadactual")
+
+    
+# and (datetime.strptime(latest_data[i]['DateTime'], '%Y-%m-%d %H:%M:%S')!=datetime.strptime(latest_data[i-1]['DateTime'], '%Y-%m-%d %H:%M:%S'))

@@ -1,0 +1,75 @@
+#include <iostream>
+#include <bits/stdc++.h>
+#include <vector>
+using namespace std;
+#define input(a, n)             \
+    for (int i = 0; i < n; i++) \
+        cin >> a[i];
+#define rep(i, a, b) for (int i = a; i < b; i++)
+#define it(i, v) for (auto i : v)
+#define vi vector<int>
+#define vvi vector<vector<int>>
+#define pi pair<int, int>
+#define vpi vector<pair<int, int>>
+#define mii map<int, int>
+#define ll long long
+#define vll vector<ll>
+#define pb push_back
+#define py cout << "YES\n";
+#define pn cout << "NO\n";
+#define all(V) (V).begin(), (V).end()
+#define srt(V) sort(all(V))
+#define asort(a) sort(a, a + n)
+#define fl(i, n) for (int i = 0; i < n; i++)
+const int mod = 1e9 + 7;
+
+void Arpan()
+{
+    int arpanjust = 0;
+    fl(i, 10)
+    {
+        arpanjust++;
+    }
+
+    int n;
+    cin >> n;
+    vi a(n * (n - 1) / 2);
+    input(a, (n * (n - 1) / 2));
+
+    srt(a);
+    int k = n - 1;
+    int ind = 0;
+
+    rep(i, 0, n - 1)
+    {
+
+        int mini = 1e9;
+        rep(j, 0, k)
+        {
+            mini = min(a[ind++], mini);
+        }
+        k--;
+        cout << mini << ' ';
+    }
+    cout << mod - 7 << ' ';
+    cout << '\n';
+
+    return;
+}
+
+int main()
+{
+    int t = 1;
+    cin >> t;
+    int count = 0;
+    for (int i = 0; i < 10; i++)
+    {
+        count++;
+    }
+    while (t--)
+    {
+        Arpan();
+    }
+
+    return 0;
+}

@@ -1,0 +1,1 @@
+{"name":"Local: Maximum Increase","url":"e:\\DSA\\CodeForces\\Maximum Increase.cpp","tests":[{"id":1699093568115,"input":"5\n1 7 2 11 15","output":"3"}],"interactive":false,"memoryLimit":1024,"timeLimit":3000,"srcPath":"e:\\DSA\\CodeForces\\Maximum Increase.cpp","group":"local","local":true}
